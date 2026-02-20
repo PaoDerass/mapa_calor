@@ -27,8 +27,8 @@ app = FastAPI(title="Sistema de Incidentes Atlas")
 # --- 1. CONFIGURACIÓN DE CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
+    allow_origins=["*"], # Cambiado de ["*"] a especificar orígenes si fuera necesario, pero por ahora quitamos allow_credentials si preferimos *
+    allow_credentials=False, # Si usamos *, no podemos usar Credentials=True
     allow_methods=["*"],
     allow_headers=["*"],
 )

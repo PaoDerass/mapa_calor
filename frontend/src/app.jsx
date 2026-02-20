@@ -107,7 +107,9 @@ function App() {
           <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
         )}
         <main className="page-transition" style={mainStyle}>
-          {activeTab === 'dashboard' && <Dashboard />}
+          {activeTab === 'dashboard' && (
+            <Dashboard onTicketClick={handleTicketClick} />
+          )}
           {activeTab === 'buscar' && (
             <TicketSearch
               setActiveTab={setActiveTab}

@@ -7,7 +7,7 @@ class Usuario(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nombre_usuario = Column(String(50), unique=True, nullable=False)
-    email = Column(String(100), unique=True, nullable=False)
+    email = Column(String(100), unique=True, nullable=True)
     password_hash = Column(String(255), nullable=False) # ¡Nunca guardes texto plano!
     es_admin = Column(Boolean, default=False)
     

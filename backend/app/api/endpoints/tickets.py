@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy import text, exc
 from sqlalchemy.orm import Session
 from geoalchemy2.functions import ST_GeomFromText
@@ -6,13 +6,14 @@ from geoalchemy2.shape import to_shape
 from shapely.geometry import Point
 from typing import Any, List
 import traceback
-from app.core.database import engine_mysql, engine_pg
+from app.core.database import engine_mysql, engine_pg, get_db
 from app.models.incidente import Incidente
 from app.models.Departamento import Departamento
 from app.models.TipoIncidente import TipoIncidente
 from app.models.Municipio import Municipio
 from app.models.SubtipoIncidente import SubtipoIncidente
 from app.models.usuario import Usuario  # Importar Usuario
+from app.api.utils import registrar_log
 
 
 router = APIRouter()
@@ -103,37 +104,37 @@ async def buscar_ticket_externo(ticket_id: str):
 
 
 @router.post("/guardar-ficha-completa")
-async def guardar_ficha_completa(payload: dict):
+@registrar_log("CREAR_INCIDENTE", detalles_func=lambda r, **kw: f"Incidente registrado: {kw['payload'].get('ticket_id')}")
+async def guardar_ficha_completa(payload: dict, db: Session = Depends(get_db)):
     """ 
     Guarda el objeto Incidente completo en Postgres.
     """
     print(f"DEBUG: Payload recibido para guardar: {payload}")
     try:
-        with Session(engine_pg) as session:
-            lat = payload.get("latitud")
-            lng = payload.get("longitud")
-            punto_geom = f"POINT({lng} {lat})" if lat and lng else None
+        lat = payload.get("latitud")
+        lng = payload.get("longitud")
+        punto_geom = f"POINT({lng} {lat})" if lat and lng else None
 
-            nuevo_incidente = Incidente(
-                ticket_id_original=payload.get("ticket_id"),
-                descripcion_original=payload.get("descripcion_original"),
-                descripcion_adicional=payload.get("nota_respaldo"),
-                ubicacion=ST_GeomFromText(punto_geom, srid=4326) if punto_geom else None,
-                barrio_colonia=payload.get("barrio_colonia"),
-                fecha_reporte_original=payload.get("fecha_reporte"),
-                tipo_incidente_id=payload.get("tipo_incidente_id"),
-                subtipo_incidente_id=payload.get("subtipo_incidente_id"),
-                departamento_id=payload.get("departamento_id"),
-                municipio_id=payload.get("municipio_id"),
-                despacho=payload.get("despacho"),
-                mando=payload.get("mando"),
-                unidad=payload.get("unidad"),
-                usuario_id=payload.get("usuario_id") # Nuevo campo: quién creó
-            )
+        nuevo_incidente = Incidente(
+            ticket_id_original=payload.get("ticket_id"),
+            descripcion_original=payload.get("descripcion_original"),
+            descripcion_adicional=payload.get("nota_respaldo"),
+            ubicacion=ST_GeomFromText(punto_geom, srid=4326) if punto_geom else None,
+            barrio_colonia=payload.get("barrio_colonia"),
+            fecha_reporte_original=payload.get("fecha_reporte"),
+            tipo_incidente_id=payload.get("tipo_incidente_id"),
+            subtipo_incidente_id=payload.get("subtipo_incidente_id"),
+            departamento_id=payload.get("departamento_id"),
+            municipio_id=payload.get("municipio_id"),
+            despacho=payload.get("despacho"),
+            mando=payload.get("mando"),
+            unidad=payload.get("unidad"),
+            usuario_id=payload.get("usuario_id") # Nuevo campo: quién creó
+        )
 
-            session.add(nuevo_incidente)
-            session.commit()
-            return {"status": "success", "message": "Incidente registrado en PostgreSQL"}
+        db.add(nuevo_incidente)
+        db.commit()
+        return {"status": "success", "message": "Incidente registrado en PostgreSQL"}
 
     except exc.IntegrityError:
         raise HTTPException(status_code=400, detail="Este ticket ya existe en el sistema.")
