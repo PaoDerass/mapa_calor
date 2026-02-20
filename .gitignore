@@ -1,0 +1,70 @@
+# --- IDEs y Editores ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Frontend (Vue / React) ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env
+.env.*
+!.env.example
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Backend (FastAPI / Python) ---
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Entornos Virtuales
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Variables de entorno y Base de Datos
+.env
+*.db
+*.sqlite3
+
+# --- Testing y Cobertura ---
+htmlcov/
+.toml
+.cache
+.pytest_cache/
+.noseresults
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.coverage
+.coverage.*
