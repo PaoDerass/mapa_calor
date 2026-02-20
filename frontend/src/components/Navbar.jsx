@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const Navbar = ({ activeTab, setActiveTab, onLogout }) => {
+const Navbar = ({ activeTab, setActiveTab, onLogout, onChangePassword }) => {
   const [showSettings, setShowSettings] = useState(false);
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-house' },
@@ -60,6 +60,11 @@ const Navbar = ({ activeTab, setActiveTab, onLogout }) => {
                 </button>
               </li>
               <li>
+                <button className="dropdown-item py-2 d-flex align-items-center" onClick={() => { onChangePassword(); setShowSettings(false); }}>
+                  <i className="fa-solid fa-key me-2 text-primary" style={{ width: '20px' }}></i>Cambiar Contraseña
+                </button>
+              </li>
+              <li>
                 <button className="dropdown-item py-2 d-flex align-items-center" onClick={() => { setActiveTab('admin'); setShowSettings(false); }}>
                   <i className="fa-solid fa-user-shield me-2 text-primary" style={{ width: '20px' }}></i>Permisos y Roles
                 </button>
@@ -74,10 +79,12 @@ const Navbar = ({ activeTab, setActiveTab, onLogout }) => {
           </div>
 
           <div className="d-flex align-items-center gap-2 me-2">
-            <span className="small text-muted d-none d-sm-block" style={{ fontSize: '0.75rem' }}>Admin</span>
+            <span className="small text-muted d-none d-sm-block" style={{ fontSize: '0.75rem' }}>
+              {localStorage.getItem('username') || 'Usuario'}
+            </span>
             <div className="bg-primary rounded-circle d-flex align-items-center justify-content-center text-white shadow-sm"
               style={{ width: '28px', height: '28px', fontSize: '0.7rem', fontWeight: 'bold' }}>
-              A
+              {(localStorage.getItem('username') || 'A').charAt(0).toUpperCase()}
             </div>
           </div>
 

@@ -9,12 +9,63 @@ import AdminPanel from './pages/AdminPanel';
 import SystemLogs from './pages/SystemLogs';
 import TicketDetail from './pages/TicketDetail';
 import { ModalProvider } from './components/Modal';
+import ChangePasswordModal from './components/ChangePasswordModal';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(localStorage.getItem('activeTab') || 'dashboard');
   const [tempCoords, setTempCoords] = useState(null);
-  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [selectedTicket, setSelectedTicket] = useState(() => {
+    const saved = localStorage.getItem('selectedTicket');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  React.useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
+
+  React.useEffect(() => {
+    if (selectedTicket) {
+      localStorage.setItem('selectedTicket', JSON.stringify(selectedTicket));
+    } else {
+      localStorage.removeItem('selectedTicket');
+    }
+  }, [selectedTicket]);
+
+  // CIERRE DE SESIÓN POR INACTIVIDAD (1 HORA)
+  React.useEffect(() => {
+    if (!token) return;
+
+    let timeoutId;
+    const INACTIVITY_TIME = 3600000; // 1 hora en milisegundos
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        console.log("Sesión cerrada por inactividad");
+        handleLogout();
+      }, INACTIVITY_TIME);
+    };
+
+    const activityEvents = [
+      'mousedown', 'mousemove', 'keydown',
+      'scroll', 'touchstart', 'click'
+    ];
+
+    activityEvents.forEach(event => {
+      window.addEventListener(event, resetTimer);
+    });
+
+    resetTimer(); // Iniciar el temporizador al cargar
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      activityEvents.forEach(event => {
+        window.removeEventListener(event, resetTimer);
+      });
+    };
+  }, [token]);
 
   if (!token) {
     return <Login setToken={setToken} />;
@@ -50,7 +101,11 @@ function App() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           onLogout={handleLogout}
+          onChangePassword={() => setShowPasswordModal(true)}
         />
+        {showPasswordModal && (
+          <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
+        )}
         <main className="page-transition" style={mainStyle}>
           {activeTab === 'dashboard' && <Dashboard />}
           {activeTab === 'buscar' && (

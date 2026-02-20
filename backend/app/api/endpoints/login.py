@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import Any
+from pydantic import BaseModel
 
 # Importaciones de tu estructura
 from app.core.database import get_db
@@ -42,3 +43,28 @@ async def login(
         "user_id": user.id,
         "username": user.nombre_usuario
     }
+
+class ChangePasswordRequest(BaseModel):
+    user_id: int
+    current_password: str
+    new_password: str
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    db: Session = Depends(get_db)
+):
+    # 1. Buscar al usuario
+    user = db.query(Usuario).filter(Usuario.id == request.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    # 2. Verificar contraseña actual
+    if not verificar_password(request.current_password, str(user.password_hash)):
+        raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
+    
+    # 3. Actualizar contraseña
+    user.password_hash = obtener_password_hash(request.new_password)
+    db.commit()
+    
+    return {"message": "Contraseña actualizada exitosamente"}
