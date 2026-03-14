@@ -96,7 +96,6 @@ const SelectorUbicacion = ({ inicial, onGuardar, onCerrar }) => {
 // ─────────────────────────────────────────────
 const TicketForm = ({ onCancel, coords }) => {
     const { showAlert, showConfirm } = useModal();
-    const [modoManual, setModoManual] = useState(false);
     const [ticketId, setTicketId] = useState('');
     const [datos, setDatos] = useState({});
     const [loading, setLoading] = useState(false);
@@ -104,7 +103,7 @@ const TicketForm = ({ onCancel, coords }) => {
     const [notaRespaldo, setNotaRespaldo] = useState('');
     const [unidad, setUnidad] = useState('');
     const [mando, setMando] = useState('');
-    const [catalogos, setCatalogos] = useState({ departamentos: [], tipos_incidente: [], municipios: [] });
+    const [catalogos, setCatalogos] = useState({ departamentos: [], tipos_incidente: [], municipios: [], subtipos_incidente: [] });
 
     // Prellenar coordenadas si venimos del MapViewer
     useEffect(() => {
@@ -119,7 +118,7 @@ const TicketForm = ({ onCancel, coords }) => {
         }
     }, [coords]);
 
-    // Cargar catálogos para el modo manual
+    // Cargar catálogos
     useEffect(() => {
         fetch('http://127.0.0.1:8000/api/tickets/catalogos')
             .then(r => r.json())
@@ -128,49 +127,47 @@ const TicketForm = ({ onCancel, coords }) => {
     }, []);
 
     // Municipios filtrados según el departamento seleccionado
+    const municipiosSeguros = catalogos.municipios || [];
     const municipiosFiltrados = datos.departamento_id
-        ? catalogos.municipios.filter(m => m.departamento_id === parseInt(datos.departamento_id))
-        : catalogos.municipios;
+        ? municipiosSeguros.filter(m => m.departamento_id === parseInt(datos.departamento_id))
+        : municipiosSeguros;
 
     // Subtipos filtrados según el tipo seleccionado
+    const subtiposSeguros = catalogos.subtipos_incidente || [];
     const subtiposFiltrados = datos.tipo_incidente_id
-        ? catalogos.subtipos_incidente.filter(s => s.tipo_incidente_id === parseInt(datos.tipo_incidente_id))
-        : catalogos.subtipos_incidente;
+        ? subtiposSeguros.filter(s => s.tipo_incidente_id === parseInt(datos.tipo_incidente_id))
+        : subtiposSeguros;
 
-    // ── Modo Automático: jalar de MySQL ──
+    // ── Búsqueda de Ticket: jala datos y los pone en los inputs editables ──
     const buscarTicket = async () => {
         if (!ticketId) return;
         setLoading(true);
         try {
             const res = await fetch(`http://127.0.0.1:8000/api/tickets/buscar-externo/${ticketId}`);
-            const data = await res.json();
             if (res.ok) {
-                // Intentar emparejar catálogos por NOMBRE para asegurar compatibilidad Postgres
-                const clean = (str) => (str || '').toString().trim().toLowerCase();
+                const data = await res.json();
+                // Intentar emparejar catálogos por NOMBRE para asegurar compatibilidad Postgres (ignorando tildes)
+                const clean = (str) => (str || '').toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
                 const foundDepto = catalogos.departamentos.find(d => clean(d.nombre) === clean(data.departamento_nombre));
                 const foundMuni = catalogos.municipios.find(m => clean(m.nombre) === clean(data.municipio_nombre));
                 const foundTipo = catalogos.tipos_incidente.find(t => clean(t.nombre) === clean(data.tipologia));
                 const foundSub = catalogos.subtipos_incidente.find(s => clean(s.nombre) === clean(data.subtipologia));
 
-                setDatos({
+                setDatos(prev => ({
+                    ...prev,
                     ...data,
-                    tipo_incidente_id: foundTipo ? foundTipo.id : null,
-                    subtipo_incidente_id: foundSub ? foundSub.id : null,
+                    tipo_incidente_id: foundTipo ? foundTipo.id : (data.tipo_incidente_id || null),
+                    subtipo_incidente_id: foundSub ? foundSub.id : (data.subtipo_incidente_id || null),
                     departamento_id: foundDepto ? foundDepto.id : (data.departamento_id || null),
                     municipio_id: foundMuni ? foundMuni.id : (data.municipio_id || null),
-                    ubicacion_origen: data.coordenada ? 'original' : 'pendiente'
-                });
+                    ubicacion_origen: data.coordenada ? 'original' : 'pendiente',
+                    barrio_colonia: data.registro || data.barrio_colonia || ''
+                }));
+                await showAlert('Ticket cargado. Puede revisar y editar los datos antes de guardar.', 'success', 'Ticket encontrado');
             } else {
-                // Si no existe en MySQL, ofrecer pasar a modo manual
-                const irManual = await showConfirm(
-                    `No se encontró el ticket "${ticketId}" en la base de datos. ¿Deseas registrarlo manualmente?`,
-                    'Ticket no encontrado'
-                );
-                if (irManual) {
-                    setModoManual(true);
-                    setDatos({ ticket_manual: ticketId, ubicacion_origen: coords ? 'manual' : 'pendiente' });
-                }
+                await showAlert(`No se encontró el ticket "${ticketId}". Puede ingresar los datos manualmente.`, 'info', 'Ticket no encontrado');
+                setDatos(prev => ({ ...prev, ubicacion_origen: coords ? 'manual' : 'pendiente' }));
             }
         } catch (e) {
             await showAlert('Error de conexión con el servidor.', 'error', 'Error de conexión');
@@ -191,10 +188,10 @@ const TicketForm = ({ onCancel, coords }) => {
 
     const handleAbrirMapa = () => setMostrarMapa(true);
 
-    // ── Guardar ficha (ambos modos) ──
+    // ── Guardar ficha (único modo editable) ──
     const guardarFicha = async (e) => {
         e.preventDefault();
-        const idFinal = modoManual ? datos.ticket_manual : datos.ticket;
+        const idFinal = ticketId;
         if (!idFinal) {
             await showAlert('El número de ticket es obligatorio.', 'warning', 'Campo requerido');
             return;
@@ -207,7 +204,7 @@ const TicketForm = ({ onCancel, coords }) => {
             nota_respaldo: notaRespaldo,
             latitud: datos.latitud || (datos.coordenada ? parseFloat(datos.coordenada.split(',')[0]) : null),
             longitud: datos.longitud || (datos.coordenada ? parseFloat(datos.coordenada.split(',')[1]) : null),
-            barrio_colonia: datos.registro || datos.barrio_manual,
+            barrio_colonia: datos.barrio_colonia || datos.registro,
             fecha_reporte: datos.fecha ? `${datos.fecha} ${datos.hora || '00:00'}` : null,
             unidad: unidad,
             mando: mando,
@@ -238,22 +235,16 @@ const TicketForm = ({ onCancel, coords }) => {
         finally { setLoading(false); }
     };
 
-    // Helpers de campo: en modo automático son readOnly, en modo manual son editables
-    const inputAuto = (label, campo, tipo = "text", placeholder = '') => (
-        <div>
-            <label className="form-label small fw-bold text-muted text-uppercase">{label}</label>
-            <input type={tipo} className="form-control bg-light" readOnly value={datos[campo] || ''} placeholder={placeholder} />
-        </div>
-    );
-
+    // Helpers de campo (Diseño Limpio, Espacioso, sin cajas extra)
     const inputManual = (label, campo, tipo = "text", placeholder = '', requerido = false) => (
-        <div>
-            <label className="form-label small fw-bold text-uppercase" style={{ color: requerido ? '#0d6efd' : '#6c757d' }}>
+        <div className="mb-4">
+            <label className="form-label fw-semibold text-secondary" style={{ fontSize: '0.85rem', letterSpacing: '0.5px' }}>
                 {label}{requerido && <span className="text-danger ms-1">*</span>}
             </label>
             <input
                 type={tipo}
-                className="form-control shadow-sm"
+                className="form-control form-control-lg bg-light border-0 shadow-none rounded-3"
+                style={{ fontSize: '0.95rem' }}
                 placeholder={placeholder}
                 value={datos[campo] || ''}
                 onChange={(e) => setDatos({ ...datos, [campo]: e.target.value })}
@@ -263,14 +254,16 @@ const TicketForm = ({ onCancel, coords }) => {
     );
 
     const selectManual = (label, campo, opciones, requerido = false) => (
-        <div>
-            <label className="form-label small fw-bold text-uppercase" style={{ color: requerido ? '#0d6efd' : '#6c757d' }}>
+        <div className="mb-4">
+            <label className="form-label fw-semibold text-secondary" style={{ fontSize: '0.85rem', letterSpacing: '0.5px' }}>
                 {label}{requerido && <span className="text-danger ms-1">*</span>}
             </label>
             <select
-                className="form-select shadow-sm"
+                className="form-select form-select-lg bg-light border-0 shadow-none rounded-3"
+                style={{ fontSize: '0.95rem' }}
                 value={datos[campo] || ''}
                 onChange={(e) => setDatos({ ...datos, [campo]: e.target.value })}
+                required={requerido}
             >
                 <option value="">— Seleccionar —</option>
                 {opciones.map(op => <option key={op.id} value={op.id}>{op.nombre}</option>)}
@@ -288,236 +281,147 @@ const TicketForm = ({ onCancel, coords }) => {
                 />
             )}
 
-            <form className="card shadow border-0 rounded-4 p-4" onSubmit={guardarFicha}>
-                {/* ── Encabezado con toggle de modo ── */}
-                <div className="d-flex align-items-center justify-content-between mb-4 border-bottom pb-3">
-                    <h3 className="fw-bold m-0 text-primary">
-                        <i className={`fa-solid ${modoManual ? 'fa-pencil' : 'fa-bolt'} me-2`}></i>
-                        {modoManual ? 'Registro Manual de Incidente' : 'Nueva Ficha de Incidente'}
-                    </h3>
-                    <div className="d-flex align-items-center gap-3">
-                        {modoManual && (
-                            <span className="badge bg-warning text-dark px-3 py-2 rounded-pill">
-                                <i className="fa-solid fa-pencil me-1"></i> Modo Manual
-                            </span>
-                        )}
-                        <div className="form-check form-switch m-0">
-                            <input
-                                className="form-check-input"
-                                type="checkbox"
-                                role="switch"
-                                id="toggleModo"
-                                checked={modoManual}
-                                onChange={() => {
-                                    setModoManual(!modoManual);
-                                    setDatos({
-                                        ...(coords ? {
-                                            latitud: coords.lat,
-                                            longitud: coords.lng,
-                                            coordenada: `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`,
-                                            ubicacion_origen: 'manual'
-                                        } : {})
-                                    });
-                                }}
-                                style={{ width: '3em', height: '1.5em' }}
+            <form className="card border-0 rounded-4 shadow-sm p-3 p-md-5" onSubmit={guardarFicha}>
+                {/* ── Encabezado Limpio ── */}
+                <div className="d-flex flex-column flex-md-row align-items-center justify-content-between mb-5 pb-3 border-bottom">
+                    <div>
+                        <h3 className="fw-bold text-dark m-0">Registro de Incidente</h3>
+                        <p className="text-muted small m-0 mt-1">Complete todos los datos obligatorios para crear la ficha operativa.</p>
+                    </div>
+                </div>
+
+                {/* Buscador de Ticket Principal (Minimalista) */}
+                <div className="row mb-5 justify-content-center">
+                    <div className="col-12">
+                        <label className="form-label fw-bold text-primary small mb-2 d-flex justify-content-between">
+                            <span><i className="fa-solid fa-magnifying-glass me-2"></i>BUSCAR TICKET EXISTENTE</span>
+                            <span className="text-muted fw-normal">(Opcional)</span>
+                        </label>
+                        <div className="input-group">
+                            <input type="text" className="form-control form-control-lg bg-light border-0 text-uppercase rounded-start-3 focus-ring-primary"
+                                style={{ fontSize: '1rem' }}
+                                value={ticketId} onChange={(e) => setTicketId(e.target.value)}
+                                placeholder="NÚMERO TICKET (Ej: TIC-0000)" 
+                                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), buscarTicket())}
                             />
-                            <label className="form-check-label small fw-semibold ms-2" htmlFor="toggleModo">
-                                {modoManual ? 'Automático' : 'Manual'}
-                            </label>
+                            <button className="btn btn-primary px-4 fw-bold rounded-end-3" type="button" onClick={buscarTicket} disabled={loading}>
+                                {loading ? <span className="spinner-border spinner-border-sm"></span> : 'IMPORTAR DATOS'}
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                {/* ───────────── MODO AUTOMÁTICO ───────────── */}
-                {!modoManual && (
-                    <div className="row g-3">
-                        {/* Buscador de ticket */}
-                        <div className="col-md-4">
-                            <label className="form-label fw-bold small">NÚMERO DE TICKET</label>
-                            <div className="input-group shadow-sm">
-                                <input type="text" className="form-control text-uppercase"
-                                    value={ticketId} onChange={(e) => setTicketId(e.target.value)}
-                                    placeholder="TIC-0000"
-                                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), buscarTicket())}
-                                />
-                                <button className="btn btn-primary" type="button" onClick={buscarTicket} disabled={loading}>
-                                    {loading ? <span className="spinner-border spinner-border-sm"></span> : 'JALAR'}
-                                </button>
+                {/* SECCIÓN 1: UBICACIÓN */}
+                <h5 className="fw-bold text-dark mb-4 border-start border-3 border-primary ps-3 pb-1">Ubicación Geográfica</h5>
+                <div className="row mb-5">
+                    <div className="col-md-4">
+                        {selectManual('DEPARTAMENTO', 'departamento_id', catalogos.departamentos, true)}
+                    </div>
+                    <div className="col-md-4">
+                        {selectManual('MUNICIPIO', 'municipio_id', municipiosFiltrados, true)}
+                    </div>
+                    <div className="col-md-4">
+                        {inputManual('BARRIO O COLONIA', 'barrio_colonia', 'text', 'Ej: Barrio El Centro')}
+                    </div>
+                    <div className="col-md-12">
+                        <label className="form-label fw-semibold text-secondary" style={{ fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                            PUNTO EXACTO EN EL MAPA <span className="text-danger">*</span>
+                        </label>
+                        <div className="d-flex align-items-center bg-light p-2 rounded-3">
+                            <i className="fa-solid fa-map-location-dot text-muted fs-4 ms-3 me-3"></i>
+                            <div className="flex-grow-1">
+                                <span className={`fw-bold ${datos.coordenada ? 'text-dark' : 'text-muted'}`}>
+                                    {datos.coordenada || 'Coordenadas no establecidas'}
+                                </span>
                             </div>
-                        </div>
-                        <div className="col-md-4">{inputAuto('Departamento', 'departamento_nombre')}</div>
-                        <div className="col-md-4">{inputAuto('Municipio', 'municipio_nombre')}</div>
-
-                        {/* Ubicación */}
-                        <div className="col-md-4">
-                            <label className="form-label small fw-bold text-danger text-uppercase">Ubicación Geográfica</label>
-                            <div className="input-group shadow-sm">
-                                <input type="text" className="form-control bg-light fw-bold" readOnly
-                                    value={datos.coordenada || 'PENDIENTE'} />
-                                <button className={`btn ${datos.ubicacion_origen === 'manual' ? 'btn-warning' : 'btn-danger'}`}
-                                    type="button" onClick={handleAbrirMapa}>
-                                    <i className="bi bi-geo-alt-fill me-1"></i>
-                                    {datos.ubicacion_origen === 'manual' ? 'Editar' : 'Ubicar'}
-                                </button>
-                            </div>
-                        </div>
-                        <div className="col-md-4">{inputAuto('Tipología', 'tipologia')}</div>
-                        <div className="col-md-4">{inputAuto('Subtipología', 'subtipologia')}</div>
-
-                        <div className="col-md-3">
-                            <label className="form-label small fw-bold text-muted text-uppercase">Fecha</label>
-                            <input type="date" className="form-control bg-light" readOnly value={datos.fecha || ''} />
-                        </div>
-                        <div className="col-md-3">
-                            <label className="form-label small fw-bold text-primary text-uppercase">Hora de Intervención</label>
-                            <input type="time" className="form-control shadow-sm" value={datos.hora || ''}
-                                onChange={(e) => setDatos({ ...datos, hora: e.target.value })} />
-                        </div>
-                        <div className="col-md-3">{inputAuto('Despacho', 'despacho')}</div>
-                        <div className="col-md-3">
-                            <label className="form-label small fw-bold text-primary text-uppercase">Unidad / Patrulla</label>
-                            <input type="text" className="form-control shadow-sm" placeholder="Ej: PN-102"
-                                value={unidad} onChange={(e) => setUnidad(e.target.value)} />
-                        </div>
-
-                        <div className="col-12">
-                            <label className="form-label small fw-bold text-muted text-uppercase">Descripción de la llamada</label>
-                            <textarea className="form-control bg-light" readOnly rows="2" value={datos.descripcion || ''}></textarea>
-                        </div>
-                        <div className="col-12">
-                            <label className="form-label small fw-bold text-primary text-uppercase">Nota de Respaldo Operativa</label>
-                            <textarea className="form-control shadow-sm" rows="2"
-                                placeholder="Detalles del procedimiento..."
-                                value={notaRespaldo} onChange={(e) => setNotaRespaldo(e.target.value)}></textarea>
-                        </div>
-
-                        <div className="col-md-4">{inputAuto('Sector / Colonia', 'registro')}</div>
-                        <div className="col-md-4">
-                            <label className="form-label small fw-bold text-primary text-uppercase">Oficial al Mando</label>
-                            <input type="text" className="form-control shadow-sm" placeholder="Nombre del responsable"
-                                value={mando} onChange={(e) => setMando(e.target.value)} />
-                        </div>
-                        <div className="col-md-4 d-flex align-items-end justify-content-end gap-2">
-                            <button type="button" className="btn btn-secondary px-4" onClick={onCancel}>CANCELAR</button>
-                            <button type="submit" className="btn btn-success fw-bold px-4 shadow" disabled={loading}>
-                                {loading ? 'PROCESANDO...' : 'GUARDAR FICHA'}
+                            <button className={`btn ${datos.ubicacion_origen === 'manual' ? 'btn-outline-primary' : 'btn-danger'} rounded-3 px-4 fw-bold`}
+                                type="button" onClick={handleAbrirMapa}>
+                                <i className="fa-solid fa-pencil me-2"></i>
+                                {datos.coordenada ? 'MODIFICAR PUNTO' : 'SELECCIONAR PUNTO'}
                             </button>
                         </div>
                     </div>
-                )}
+                </div>
 
-                {/* ───────────── MODO MANUAL ───────────── */}
-                {modoManual && (
-                    <div className="row g-3">
-                        <div className="col-12">
-                            <div className="alert alert-warning border-0 rounded-3 py-2 px-3 d-flex align-items-center gap-2 mb-0">
-                                <i className="fa-solid fa-circle-info"></i>
-                                <small>En modo manual puedes registrar un incidente sin que exista en MySQL. Los campos marcados con <span className="text-danger fw-bold">*</span> son obligatorios.</small>
-                            </div>
-                        </div>
-
-                        {/* ID del ticket manual */}
-                        <div className="col-md-4">
-                            {inputManual('Número de Ticket', 'ticket_manual', 'text', 'Ej: TIC-0000', true)}
-                        </div>
-
-                        {/* Departamento y municipio con selects */}
-                        <div className="col-md-4">
-                            {selectManual('Departamento', 'departamento_id', catalogos.departamentos)}
-                        </div>
-                        <div className="col-md-4">
-                            {selectManual('Municipio', 'municipio_id', municipiosFiltrados)}
-                        </div>
-
-                        {/* Ubicación */}
-                        <div className="col-md-4">
-                            <label className="form-label small fw-bold text-danger text-uppercase">Ubicación Geográfica</label>
-                            <div className="input-group shadow-sm">
-                                <input type="text" className="form-control bg-light fw-bold" readOnly
-                                    value={datos.coordenada || 'Sin coordenadas'} />
-                                <button className={`btn ${datos.ubicacion_origen === 'manual' ? 'btn-warning' : 'btn-danger'}`}
-                                    type="button" onClick={handleAbrirMapa}>
-                                    <i className="bi bi-geo-alt-fill me-1"></i>
-                                    {datos.ubicacion_origen === 'manual' ? 'Editar' : 'Ubicar'}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Tipo de incidente */}
-                        <div className="col-md-4">
-                            {selectManual('Tipo de Incidente', 'tipo_incidente_id', catalogos.tipos_incidente)}
-                        </div>
-
-                        {/* Colonia/barrio manual */}
-                        <div className="col-md-4">
-                            {inputManual('Sector / Colonia', 'barrio_manual', 'text', 'Ej: Col. Kennedy')}
-                        </div>
-
-                        {/* Subtipo de incidente */}
-                        <div className="col-md-4">
-                            {selectManual('Subtipo de Incidente', 'subtipo_incidente_id', subtiposFiltrados)}
-                        </div>
-
-                        {/* Despacho manual */}
-                        <div className="col-md-4">
-                            {inputManual('Despacho', 'despacho', 'text', 'Ej: Despacho 1')}
-                        </div>
-
-                        {/* Fecha y hora */}
-                        <div className="col-md-3">
-                            <label className="form-label small fw-bold text-primary text-uppercase">Fecha del Incidente<span className="text-danger ms-1">*</span></label>
-                            <input type="date" className="form-control shadow-sm"
-                                value={datos.fecha || ''}
-                                onChange={(e) => setDatos({ ...datos, fecha: e.target.value })}
-                                required
-                            />
-                        </div>
-                        <div className="col-md-3">
-                            <label className="form-label small fw-bold text-primary text-uppercase">Hora</label>
-                            <input type="time" className="form-control shadow-sm"
-                                value={datos.hora || ''}
-                                onChange={(e) => setDatos({ ...datos, hora: e.target.value })}
-                            />
-                        </div>
-                        <div className="col-md-3">
-                            <label className="form-label small fw-bold text-primary text-uppercase">Unidad / Patrulla</label>
-                            <input type="text" className="form-control shadow-sm" placeholder="Ej: PN-102"
-                                value={unidad} onChange={(e) => setUnidad(e.target.value)} />
-                        </div>
-                        <div className="col-md-3">
-                            <label className="form-label small fw-bold text-primary text-uppercase">Oficial al Mando</label>
-                            <input type="text" className="form-control shadow-sm" placeholder="Nombre del responsable"
-                                value={mando} onChange={(e) => setMando(e.target.value)} />
-                        </div>
-
-                        {/* Descripción editable en modo manual */}
-                        <div className="col-12">
-                            <label className="form-label small fw-bold text-primary text-uppercase">
-                                Descripción del Incidente<span className="text-danger ms-1">*</span>
+                {/* SECCIÓN 2: TIPOLOGÍA Y TIEMPOS */}
+                <h5 className="fw-bold text-dark mb-4 border-start border-3 border-danger ps-3 pb-1">Tipo de Incidente y Tiempos</h5>
+                <div className="row mb-5">
+                    <div className="col-md-6">
+                        {selectManual('TIPO DE INCIDENTE', 'tipo_incidente_id', catalogos.tipos_incidente, true)}
+                    </div>
+                    <div className="col-md-6">
+                        {selectManual('SUBTIPO DE INCIDENTE', 'subtipo_incidente_id', subtiposFiltrados, true)}
+                    </div>
+                    <div className="col-md-6">
+                        <div className="mb-4">
+                            <label className="form-label fw-semibold text-secondary" style={{ fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                                FECHA DEL REPORTE <span className="text-danger">*</span>
                             </label>
-                            <textarea className="form-control shadow-sm" rows="3"
-                                placeholder="Describe brevemente lo ocurrido..."
+                            <input type="date" className="form-control form-control-lg bg-light border-0 shadow-none rounded-3"
+                                style={{ fontSize: '0.95rem' }} value={datos.fecha || ''}
+                                onChange={(e) => setDatos({ ...datos, fecha: e.target.value })} required />
+                        </div>
+                    </div>
+                    <div className="col-md-6">
+                        <div className="mb-4">
+                            <label className="form-label fw-semibold text-secondary" style={{ fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                                HORA DEL INCIDENTE
+                            </label>
+                            <input type="time" className="form-control form-control-lg bg-light border-0 shadow-none rounded-3"
+                                style={{ fontSize: '0.95rem' }} value={datos.hora || ''}
+                                onChange={(e) => setDatos({ ...datos, hora: e.target.value })} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* SECCIÓN 3: ASIGNACIÓN Y NARRACIÓN */}
+                <h5 className="fw-bold text-dark mb-4 border-start border-3 border-success ps-3 pb-1">Asignación Operativa y Detalles</h5>
+                <div className="row mb-5">
+                    <div className="col-md-4">
+                        {inputManual('DESPACHO ASIGNADO', 'despacho', 'text', 'Ej: Sala 1')}
+                    </div>
+                    <div className="col-md-4">
+                        {inputManual('UNIDAD MOVIL', 'unidad', 'text', 'Identificador de la unidad')}
+                    </div>
+                    <div className="col-md-4">
+                        {inputManual('OFICIAL A CARGO', 'mando', 'text', 'Nombre completo')}
+                    </div>
+                    
+                    <div className="col-12 mt-2">
+                        <div className="mb-4">
+                            <label className="form-label fw-semibold text-secondary d-flex justify-content-between" style={{ fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                                <span>DESCRIPCIÓN DEL HECHO <span className="text-danger">*</span></span>
+                            </label>
+                            <textarea className="form-control bg-light border-0 shadow-none rounded-3 p-3" rows="4"
+                                style={{ fontSize: '0.95rem' }}
+                                placeholder="Redacte todos los hechos pertinentes, daños, involucrados..."
                                 value={datos.descripcion || ''}
                                 onChange={(e) => setDatos({ ...datos, descripcion: e.target.value })}
                                 required
                             ></textarea>
                         </div>
-                        <div className="col-12">
-                            <label className="form-label small fw-bold text-muted text-uppercase">Nota de Respaldo Operativa</label>
-                            <textarea className="form-control shadow-sm" rows="2"
-                                placeholder="Detalles adicionales del procedimiento..."
+                    </div>
+                    <div className="col-12">
+                        <div className="mb-4">
+                            <label className="form-label fw-semibold text-secondary" style={{ fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                                OBSERVACIONES ADICIONALES
+                            </label>
+                            <textarea className="form-control bg-light border-0 shadow-none rounded-3 p-3" rows="2"
+                                style={{ fontSize: '0.95rem' }}
+                                placeholder="Anotaciones extra para respaldo..."
                                 value={notaRespaldo} onChange={(e) => setNotaRespaldo(e.target.value)}></textarea>
                         </div>
-
-                        <div className="col-12 d-flex justify-content-end gap-2 pt-2">
-                            <button type="button" className="btn btn-secondary px-4" onClick={onCancel}>CANCELAR</button>
-                            <button type="submit" className="btn btn-warning fw-bold px-4 shadow text-dark" disabled={loading}>
-                                <i className="fa-solid fa-floppy-disk me-2"></i>
-                                {loading ? 'GUARDANDO...' : 'GUARDAR FICHA MANUAL'}
-                            </button>
-                        </div>
                     </div>
-                )}
+                </div>
+
+                {/* BOTONES FINALES */}
+                <div className="d-flex justify-content-end gap-3 pt-3">
+                    <button type="button" className="btn btn-light px-5 fw-bold text-secondary" onClick={onCancel} style={{ letterSpacing: '1px' }}>CANCELAR</button>
+                    <button type="submit" className="btn btn-dark px-5 fw-bold text-white shadow-sm" disabled={loading} style={{ letterSpacing: '1px' }}>
+                        <i className="fa-solid fa-check me-2"></i>
+                        {loading ? 'PROCESANDO...' : 'REGISTRAR FICHA'}
+                    </button>
+                </div>
             </form>
         </div>
     );
