@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from geoalchemy2.functions import ST_GeomFromText
 from geoalchemy2.shape import to_shape
 from shapely.geometry import Point
-from typing import Any, List
+from typing import Any, List, Optional
 import traceback
 from app.core.database import engine_mysql, engine_pg, get_db
 from app.models.incidente import Incidente
@@ -146,7 +146,15 @@ async def guardar_ficha_completa(payload: dict, db: Session = Depends(get_db)):
 
 
 @router.get("/listar-recientes")
-async def listar_recientes():
+async def listar_recientes(
+    departamento: Optional[int] = None,
+    municipio: Optional[int] = None,
+    tipo: Optional[int] = None,
+    subtipo: Optional[int] = None,
+    despacho: Optional[str] = None,
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None
+):
     """
     Obtiene todos los incidentes registrados en PostgreSQL.
     Se usa List[Any] para que Pylance no proteste por los tipos de SQLAlchemy.
@@ -168,8 +176,25 @@ async def listar_recientes():
                 .outerjoin(TipoIncidente, Incidente.tipo_incidente_id == TipoIncidente.id)
                 .outerjoin(SubtipoIncidente, Incidente.subtipo_incidente_id == SubtipoIncidente.id)
                 .outerjoin(Usuario, Incidente.usuario_id == Usuario.id) # Join con usuario
-                .order_by(Incidente.fecha_registro_sistema.desc())
             )
+
+            # Aplicar filtros si existen
+            if departamento:
+                query = query.filter(Incidente.departamento_id == departamento)
+            if municipio:
+                query = query.filter(Incidente.municipio_id == municipio)
+            if tipo:
+                query = query.filter(Incidente.tipo_incidente_id == tipo)
+            if subtipo:
+                query = query.filter(Incidente.subtipo_incidente_id == subtipo)
+            if despacho:
+                query = query.filter(Incidente.despacho.ilike(f"%{despacho}%"))
+            if fecha_desde:
+                query = query.filter(Incidente.fecha_reporte_original >= fecha_desde)
+            if fecha_hasta:
+                query = query.filter(Incidente.fecha_reporte_original <= f"{fecha_hasta} 23:59:59")
+
+            query = query.order_by(Incidente.fecha_registro_sistema.desc())
             
             incidentes = query.all()
             
