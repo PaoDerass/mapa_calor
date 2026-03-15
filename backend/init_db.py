@@ -10,6 +10,7 @@ try:
     from app.models.SubtipoIncidente import SubtipoIncidente
     from app.models.Regional import Regional
     from app.models.Rol import Rol
+    from app.models.Permisos import Permiso
     from app.models.usuario import Usuario
     print("✅ Modelos cargados correctamente.")
 except ImportError as e:

@@ -7,7 +7,12 @@ const AdminPanel = () => {
     const [data, setData] = useState([]);
     const [roles, setRoles] = useState([]);
     const [regionales, setRegionales] = useState([]);
+    const [permisos, setPermisos] = useState([]);
     const [loading, setLoading] = useState(false);
+
+    // Estado para Modales de Rol
+    const [showRolePermissionsModal, setShowRolePermissionsModal] = useState(false);
+    const [editingRole, setEditingRole] = useState(null);
 
     // Estado para el modal de usuario
     const [showUserModal, setShowUserModal] = useState(false);
@@ -42,12 +47,14 @@ const AdminPanel = () => {
     // Cargar catálogos para el modal
     const cargarCatalogos = async () => {
         try {
-            const [resRoles, resReg] = await Promise.all([
+            const [resRoles, resReg, resPerms] = await Promise.all([
                 fetch('http://127.0.0.1:8000/api/admin/roles'),
-                fetch('http://127.0.0.1:8000/api/admin/regionales')
+                fetch('http://127.0.0.1:8000/api/admin/regionales'),
+                fetch('http://127.0.0.1:8000/api/admin/permisos')
             ]);
             if (resRoles.ok) setRoles(await resRoles.json());
             if (resReg.ok) setRegionales(await resReg.json());
+            if (resPerms.ok) setPermisos(await resPerms.json());
         } catch (e) { console.error(e); }
     };
 
@@ -127,6 +134,49 @@ const AdminPanel = () => {
         } catch (error) {
             console.error('Error en fetch:', error);
             await showAlert('Error de conexión con el servidor', 'error', 'Error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleEditRoleClick = (rol) => {
+        setEditingRole({
+            ...rol,
+            permisos_ids: rol.permisos ? rol.permisos.map(p => p.id) : []
+        });
+        setShowRolePermissionsModal(true);
+    };
+
+    const togglePermission = (permisoId) => {
+        setEditingRole(prev => {
+            const isSelected = prev.permisos_ids.includes(permisoId);
+            const newIds = isSelected
+                ? prev.permisos_ids.filter(id => id !== permisoId)
+                : [...prev.permisos_ids, permisoId];
+            return { ...prev, permisos_ids: newIds };
+        });
+    };
+
+    const handleUpdateRolePermissions = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+            const res = await fetch(`http://127.0.0.1:8000/api/admin/roles/${editingRole.id}/permisos`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ permisos_ids: editingRole.permisos_ids })
+            });
+            const result = await res.json();
+            if (res.ok) {
+                await showAlert('Permisos de rol actualizados correctamente', 'success', 'Éxito');
+                setShowRolePermissionsModal(false);
+                fetchData('roles');
+            } else {
+                await showAlert(result.detail || 'Error al actualizar permisos', 'error', 'Error');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            await showAlert('Error de conexión', 'error', 'Error');
         } finally {
             setSaving(false);
         }
@@ -235,10 +285,12 @@ const AdminPanel = () => {
                                             <tr key={r.id}>
                                                 <td className="ps-4 fw-bold">{r.nombre}</td>
                                                 <td className="text-muted small">
-                                                    {r.permisos ? r.permisos.map(p => <span key={p} className="badge bg-light text-dark border me-1">{p}</span>) : 'Acceso total'}
+                                                    {r.permisos ? r.permisos.map(p => <span key={p.id} className="badge bg-light text-dark border me-1">{p.nombre}</span>) : 'Acceso total'}
                                                 </td>
                                                 <td className="text-end pe-4">
-                                                    <button className="btn btn-sm btn-light rounded-pill px-3" onClick={() => showAlert('Detalles del rol', 'info', r.nombre)}>Ver</button>
+                                                    <button className="btn btn-sm btn-light rounded-pill px-3 me-2" onClick={() => handleEditRoleClick(r)}>
+                                                        <i className="fa-solid fa-pen-to-square me-1"></i>Editar Permisos
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -451,6 +503,56 @@ const AdminPanel = () => {
                                     <button type="button" className="btn btn-light rounded-pill px-4" onClick={() => setShowEditModal(false)}>Cancelar</button>
                                     <button type="submit" className="btn btn-primary rounded-pill px-4" disabled={saving}>
                                         {saving ? 'Guardando...' : 'Actualizar Datos'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL PARA EDITAR PERMISOS DE ROL */}
+            {showRolePermissionsModal && editingRole && (
+                <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="modal-dialog modal-dialog-centered modal-lg">
+                        <div className="modal-content border-0 shadow rounded-4">
+                            <div className="modal-header border-0 pb-0 pe-4 pt-4">
+                                <h5 className="modal-title fw-bold">
+                                    <i className="fa-solid fa-user-shield text-primary me-2"></i>
+                                    Permisos del Rol: {editingRole.nombre}
+                                </h5>
+                                <button type="button" className="btn-close" onClick={() => setShowRolePermissionsModal(false)}></button>
+                            </div>
+                            <form onSubmit={handleUpdateRolePermissions}>
+                                <div className="modal-body p-4">
+                                    <div className="row g-3">
+                                        {permisos.map(p => (
+                                            <div key={p.id} className="col-md-6">
+                                                <div className="card shadow-sm border-0 bg-light-subtle h-100">
+                                                    <div className="card-body py-2">
+                                                        <div className="form-check form-switch pt-1">
+                                                            <input
+                                                                className="form-check-input"
+                                                                type="checkbox"
+                                                                id={`check-perm-${p.id}`}
+                                                                checked={editingRole.permisos_ids.includes(p.id)}
+                                                                onChange={() => togglePermission(p.id)}
+                                                            />
+                                                            <label className="form-check-label fw-bold d-block" htmlFor={`check-perm-${p.id}`}>
+                                                                {p.nombre}
+                                                            </label>
+                                                            <small className="text-muted d-block">{p.descripcion || 'Sin descripción'}</small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="modal-footer border-0 pb-4 pe-4">
+                                    <button type="button" className="btn btn-light rounded-pill px-4" onClick={() => setShowRolePermissionsModal(false)}>Cancelar</button>
+                                    <button type="submit" className="btn btn-primary rounded-pill px-4" disabled={saving}>
+                                        {saving ? 'Guardando...' : 'Guardar Cambios'}
                                     </button>
                                 </div>
                             </form>

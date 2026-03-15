@@ -54,17 +54,67 @@ def seed_all():
                 (3, "Operador"),
                 (4, "Supervisor")
             ]
+            roles_dict = {}
             for rol_id, nom in roles_data:
-                # Verificamos si el NOMBRE ya existe
-                existing_by_name = session.query(Rol).filter(Rol.nombre == nom).first()
-                if existing_by_name:
-                    continue
-
-                obj = session.get(Rol, rol_id)
+                # Buscar por ID y por nombre para evitar duplicados si cambian los IDs
+                obj = session.query(Rol).filter(Rol.nombre == nom).first()
                 if not obj:
-                    session.add(Rol(id=rol_id, nombre=nom))
+                    obj = session.get(Rol, rol_id)
+                
+                if not obj:
+                    obj = Rol(id=rol_id, nombre=nom)
+                    session.add(obj)
                 else:
-                    setattr(obj, "nombre", nom)
+                    obj.nombre = nom
+                roles_dict[nom] = obj
+            session.flush()
+
+            # 2.5 PERMISOS
+            print("📦 Cargando Permisos...")
+            permisos_data = [
+                (1, "buscar_ticket", "Buscar incidentes en la base externa"),
+                (2, "crear_ticket", "Importar, consolidar y guardar nuevas fichas"),
+                (3, "ver_mapa_basico", "Ver el mapa interactivo solo con marcadores"),
+                (4, "ver_dashboard", "Acceso total al Dashboard principal y Especial"),
+                (5, "ver_mapa_calor", "Activar la capa de Heatmap y filtros"),
+                (6, "exportar_datos", "Descargar la información filtrada a Excel/CSV"),
+                (7, "editar_ticket", "Modificar o corregir información de fichas"),
+                (8, "ver_rendimiento", "Acceso al Dashboard de Usuarios"),
+                (9, "gestionar_usuarios", "Crear, editar, suspender y eliminar usuarios"),
+                (10, "asignar_permisos", "Definir tipologías y departamentos específicos"),
+                (11, "ver_auditoria", "Acceso completo a la pantalla de trazabilidad")
+            ]
+            permisos_dict = {}
+            for p_id, nom, desc in permisos_data:
+                obj = session.query(Permiso).filter(Permiso.nombre == nom).first()
+                if not obj:
+                    obj = session.get(Permiso, p_id)
+                    
+                if not obj:
+                    obj = Permiso(id=p_id, nombre=nom, descripcion=desc)
+                    session.add(obj)
+                else:
+                    obj.nombre = nom
+                    obj.descripcion = desc
+                permisos_dict[nom] = obj
+            session.flush()
+
+            print("🔗 Vinculando Permisos a Roles...")
+            # Limpiar permisos antiguos para no duplicar
+            for r in roles_dict.values():
+                r.permisos.clear()
+
+            # Permisos por rol
+            p_operador = ["buscar_ticket", "crear_ticket", "ver_mapa_basico"]
+            p_analista = p_operador + ["ver_dashboard", "ver_mapa_calor", "exportar_datos"]
+            p_supervisor = p_analista + ["editar_ticket", "ver_rendimiento"]
+            p_admin = p_supervisor + ["gestionar_usuarios", "asignar_permisos", "ver_auditoria"]
+
+            roles_dict["Operador"].permisos.extend([permisos_dict[p] for p in p_operador])
+            roles_dict["Analista"].permisos.extend([permisos_dict[p] for p in p_analista])
+            roles_dict["Supervisor"].permisos.extend([permisos_dict[p] for p in p_supervisor])
+            roles_dict["Administrador"].permisos.extend([permisos_dict[p] for p in p_admin])
+            
             session.flush()
 
             # 3. DEPARTAMENTOS

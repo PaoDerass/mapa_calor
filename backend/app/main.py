@@ -11,7 +11,7 @@ from app.models.SystemLog import SystemLog
 from app.models.incidente import Incidente
 from app.models.SubtipoIncidente import SubtipoIncidente
 from app.models.usuario import Usuario # Asegúrate de que el modelo Usuario esté aquí
-
+from app.models.Permisos import Permiso
 # Importación de Routers
 from app.api.endpoints import tickets
 from app.api.endpoints import dashboard
@@ -19,7 +19,7 @@ from app.api.endpoints import login  # <--- NUEVA IMPORTACIÓN PARA EL LOGIN
 from app.api.endpoints import admin
 
 # Crear tablas en Postgres
-print("🚀 Creando tablas en PostgreSQL...")
+print("Creando tablas en PostgreSQL...")
 Base.metadata.create_all(bind=engine_pg)
 
 app = FastAPI(title="Sistema de Incidentes Atlas")

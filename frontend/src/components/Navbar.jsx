@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 const Navbar = ({ activeTab, setActiveTab, onLogout, onChangePassword }) => {
+  const { user } = useAuth();
   const [showSettings, setShowSettings] = useState(false);
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-house' },
+    ...(user.permissions?.includes('ver_dashboard') ? [{ id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-house' }] : []),
     { id: 'buscar', label: 'Tickets', icon: 'fa-solid fa-magnifying-glass' },
-    { id: 'mapa', label: 'Mapa', icon: 'fa-solid fa-location-dot' }
+    ...(user.permissions?.includes('ver_mapa_basico') ? [{ id: 'mapa', label: 'Mapa', icon: 'fa-solid fa-location-dot' }] : [])
   ];
 
   return (
@@ -40,51 +42,52 @@ const Navbar = ({ activeTab, setActiveTab, onLogout, onChangePassword }) => {
         {/* Ajustes + Perfil + Botón de Salir */}
         <div className="d-flex align-items-center gap-2 border-start ps-3">
 
-          {/* Menú de Ajustes (Dropdown) */}
-          <div className="dropdown">
-            <button
-              className="btn btn-link text-secondary p-0 me-2"
-              type="button"
-              onClick={() => setShowSettings(!showSettings)}
-              style={{ width: '32px', height: '32px' }}
-              title="Configuración y Ajustes"
-            >
-              <i className="fa-solid fa-gear" style={{ fontSize: '1rem' }}></i>
-            </button>
-            <ul className={`dropdown-menu dropdown-menu-end shadow border-0 rounded-4 mt-2 ${showSettings ? 'show' : ''}`}
-              style={{ fontSize: '0.85rem', display: showSettings ? 'block' : 'none', right: 0 }}>
-              <li><h6 className="dropdown-header text-uppercase small fw-bold text-muted">Ajustes del Sistema</h6></li>
-              <li>
-                <button className="dropdown-item py-2 d-flex align-items-center" onClick={() => { setActiveTab('admin'); setShowSettings(false); }}>
-                  <i className="fa-solid fa-users me-2 text-primary" style={{ width: '20px' }}></i>Gestionar Usuarios
-                </button>
-              </li>
-              <li>
-                <button className="dropdown-item py-2 d-flex align-items-center" onClick={() => { onChangePassword(); setShowSettings(false); }}>
-                  <i className="fa-solid fa-key me-2 text-primary" style={{ width: '20px' }}></i>Cambiar Contraseña
-                </button>
-              </li>
-              <li>
-                <button className="dropdown-item py-2 d-flex align-items-center" onClick={() => { setActiveTab('admin'); setShowSettings(false); }}>
-                  <i className="fa-solid fa-user-shield me-2 text-primary" style={{ width: '20px' }}></i>Permisos y Roles
-                </button>
-              </li>
-              <li><hr className="dropdown-divider" /></li>
-              <li>
-                <button className="dropdown-item py-2 d-flex align-items-center" onClick={() => { setActiveTab('logs'); setShowSettings(false); }}>
-                  <i className="fa-solid fa-list-check me-2 text-primary" style={{ width: '20px' }}></i>Logs del Sistema
-                </button>
-              </li>
-            </ul>
-          </div>
+          {user.permissions?.includes('gestionar_usuarios') && (
+            <div className="dropdown">
+              <button
+                className="btn btn-link text-secondary p-0 me-2"
+                type="button"
+                onClick={() => setShowSettings(!showSettings)}
+                style={{ width: '32px', height: '32px' }}
+                title="Configuración y Ajustes"
+              >
+                <i className="fa-solid fa-gear" style={{ fontSize: '1rem' }}></i>
+              </button>
+              <ul className={`dropdown-menu dropdown-menu-end shadow border-0 rounded-4 mt-2 ${showSettings ? 'show' : ''}`}
+                style={{ fontSize: '0.85rem', display: showSettings ? 'block' : 'none', right: 0 }}>
+                <li><h6 className="dropdown-header text-uppercase small fw-bold text-muted">Ajustes del Sistema</h6></li>
+                <li>
+                  <button className="dropdown-item py-2 d-flex align-items-center" onClick={() => { setActiveTab('admin'); setShowSettings(false); }}>
+                    <i className="fa-solid fa-users me-2 text-primary" style={{ width: '20px' }}></i>Gestionar Usuarios
+                  </button>
+                </li>
+                <li>
+                  <button className="dropdown-item py-2 d-flex align-items-center" onClick={() => { onChangePassword(); setShowSettings(false); }}>
+                    <i className="fa-solid fa-key me-2 text-primary" style={{ width: '20px' }}></i>Cambiar Contraseña
+                  </button>
+                </li>
+                <li>
+                  <button className="dropdown-item py-2 d-flex align-items-center" onClick={() => { setActiveTab('admin'); setShowSettings(false); }}>
+                    <i className="fa-solid fa-user-shield me-2 text-primary" style={{ width: '20px' }}></i>Permisos y Roles
+                  </button>
+                </li>
+                <li><hr className="dropdown-divider" /></li>
+                <li>
+                  <button className="dropdown-item py-2 d-flex align-items-center" onClick={() => { setActiveTab('logs'); setShowSettings(false); }}>
+                    <i className="fa-solid fa-list-check me-2 text-primary" style={{ width: '20px' }}></i>Logs del Sistema
+                  </button>
+                </li>
+              </ul>
+            </div>
+          )}
 
           <div className="d-flex align-items-center gap-2 me-2">
             <span className="small text-muted d-none d-sm-block" style={{ fontSize: '0.75rem' }}>
-              {localStorage.getItem('username') || 'Usuario'}
+              {user.username || 'Usuario'}
             </span>
             <div className="bg-primary rounded-circle d-flex align-items-center justify-content-center text-white shadow-sm"
               style={{ width: '28px', height: '28px', fontSize: '0.7rem', fontWeight: 'bold' }}>
-              {(localStorage.getItem('username') || 'A').charAt(0).toUpperCase()}
+              {(user.username || 'A').charAt(0).toUpperCase()}
             </div>
           </div>
 

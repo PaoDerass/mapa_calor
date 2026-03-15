@@ -15,10 +15,12 @@ from app.models.SubtipoIncidente import SubtipoIncidente
 from app.models.usuario import Usuario  # Importar Usuario
 from app.api.utils import registrar_log
 
+from app.api.deps import get_current_user, PermissionChecker
 
-router = APIRouter()
-
-@router.get("/buscar-externo/{ticket_id}")
+router = APIRouter(
+    dependencies=[Depends(get_current_user)]
+)
+@router.get("/buscar-externo/{ticket_id}", dependencies=[Depends(PermissionChecker(["buscar_ticket"]))])
 async def buscar_ticket_externo(ticket_id: str):
     """
     Busca un incidente en MySQL uniendo las tablas de catálogos.
@@ -103,7 +105,7 @@ async def buscar_ticket_externo(ticket_id: str):
         raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
 
 
-@router.post("/guardar-ficha-completa")
+@router.post("/guardar-ficha-completa", dependencies=[Depends(PermissionChecker(["crear_ticket"]))])
 @registrar_log("CREAR_INCIDENTE", detalles_func=lambda r, **kw: f"Incidente registrado: {kw['payload'].get('ticket_id')}")
 async def guardar_ficha_completa(payload: dict, db: Session = Depends(get_db)):
     """ 

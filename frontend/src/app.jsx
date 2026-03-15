@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import TicketSearch from './pages/TicketSearch';
 import MapViewer from './pages/MapViewer';
@@ -12,7 +13,7 @@ import { ModalProvider } from './components/Modal';
 import ChangePasswordModal from './components/ChangePasswordModal';
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const { token, logout, user } = useAuth();
   const [activeTab, setActiveTab] = useState(localStorage.getItem('activeTab') || 'dashboard');
   const [tempCoords, setTempCoords] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(() => {
@@ -22,8 +23,22 @@ function App() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   React.useEffect(() => {
+    // Role-based route protection
+    if (user && activeTab) {
+      if (!user.permissions?.includes('ver_dashboard') && activeTab === 'dashboard') {
+        setActiveTab('buscar');
+      } else if (!user.permissions?.includes('ver_mapa_basico') && activeTab === 'mapa') {
+        setActiveTab('buscar');
+      } else if (!user.permissions?.includes('gestionar_usuarios') && activeTab === 'admin') {
+        setActiveTab('buscar');
+      } else if (!user.permissions?.includes('ver_auditoria') && activeTab === 'logs') {
+        setActiveTab('buscar');
+      } else if (!user.permissions?.includes('crear_ticket') && activeTab === 'nuevo-ticket') {
+        setActiveTab('buscar');
+      }
+    }
     localStorage.setItem('activeTab', activeTab);
-  }, [activeTab]);
+  }, [activeTab, user]);
 
   React.useEffect(() => {
     if (selectedTicket) {
@@ -33,42 +48,8 @@ function App() {
     }
   }, [selectedTicket]);
 
-  // CIERRE DE SESIÓN POR INACTIVIDAD (1 HORA)
-  React.useEffect(() => {
-    if (!token) return;
-
-    let timeoutId;
-    const INACTIVITY_TIME = 3600000; // 1 hora en milisegundos
-
-    const resetTimer = () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
-        console.log("Sesión cerrada por inactividad");
-        handleLogout();
-      }, INACTIVITY_TIME);
-    };
-
-    const activityEvents = [
-      'mousedown', 'mousemove', 'keydown',
-      'scroll', 'touchstart', 'click'
-    ];
-
-    activityEvents.forEach(event => {
-      window.addEventListener(event, resetTimer);
-    });
-
-    resetTimer(); // Iniciar el temporizador al cargar
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      activityEvents.forEach(event => {
-        window.removeEventListener(event, resetTimer);
-      });
-    };
-  }, [token]);
-
   if (!token) {
-    return <Login setToken={setToken} />;
+    return <Login />;
   }
 
   const handleMapClick = (coords) => {
@@ -79,11 +60,6 @@ function App() {
   const handleTicketClick = (ticket) => {
     setSelectedTicket(ticket);
     setActiveTab('ticket-detalle');
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
   };
 
   // ESTILO PARA EL CONTENEDOR PRINCIPAL
@@ -100,7 +76,7 @@ function App() {
         <Navbar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          onLogout={handleLogout}
+          onLogout={logout}
           onChangePassword={() => setShowPasswordModal(true)}
         />
         {showPasswordModal && (

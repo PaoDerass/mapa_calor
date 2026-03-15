@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useModal } from '../components/Modal';
+import { useAuth } from '../context/AuthContext';
 
 const TicketSearch = ({ setActiveTab, onTicketClick }) => {
     const { showAlert } = useModal();
+    const { user } = useAuth();
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -92,12 +94,27 @@ const TicketSearch = ({ setActiveTab, onTicketClick }) => {
                     </h3>
                     <p className="text-muted small m-0">Registros almacenados en PostgreSQL</p>
                 </div>
-                <button
-                    onClick={() => setActiveTab('nuevo-ticket')}
-                    className="btn btn-primary px-4 py-2 rounded-pill shadow-sm fw-bold"
-                >
-                    <i className="fa-solid fa-plus me-2"></i>Nuevo Ticket
-                </button>
+                <div className="d-flex gap-2">
+                    <button
+                        className="btn btn-outline-success px-4 py-2 rounded-pill shadow-sm fw-bold"
+                        disabled={!user.permissions?.includes('exportar_datos')}
+                        onClick={() => {
+                            if (user.permissions?.includes('exportar_datos')) {
+                                alert("Funcionalidad de exportación a Excel en desarrollo.");
+                            }
+                        }}
+                    >
+                        <i className="fa-solid fa-file-excel me-2"></i>Exportar
+                    </button>
+                    {user.permissions?.includes('crear_ticket') && (
+                        <button
+                            onClick={() => setActiveTab('nuevo-ticket')}
+                            className="btn btn-primary px-4 py-2 rounded-pill shadow-sm fw-bold"
+                        >
+                            <i className="fa-solid fa-plus me-2"></i>Nuevo Ticket
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Panel de Filtros Colapsable */}

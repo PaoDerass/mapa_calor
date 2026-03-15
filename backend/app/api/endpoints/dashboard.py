@@ -9,8 +9,12 @@ from app.models.Municipio import Municipio
 from app.models.SubtipoIncidente import SubtipoIncidente
 from app.models.usuario import Usuario
 
+from app.api.deps import PermissionChecker
+
 # Usamos Router, NO app = FastAPI()
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(PermissionChecker(["ver_dashboard"]))]
+)
 
 @router.get("/dashboard-stats")
 async def get_dashboard_stats(db: Session = Depends(get_db)):

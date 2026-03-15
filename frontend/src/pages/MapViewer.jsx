@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 // --- CONFIGURACIÓN DE ICONOS POR TIPO DE INCIDENTE ---
 const TIPO_ICONOS = {
@@ -22,6 +23,7 @@ const TIPO_ICONOS = {
 };
 
 const MapViewer = ({ onMapClick }) => {
+    const { user } = useAuth();
     const [incidentes, setIncidentes] = useState([]);
     const [catalogos, setCatalogos] = useState({ departamentos: [], tipos_incidente: [], subtipos_incidente: [], municipios: [] });
     const [filtrosVisibles, setFiltrosVisibles] = useState(false);
@@ -180,11 +182,15 @@ const MapViewer = ({ onMapClick }) => {
             const { lat, lng } = e.latlng;
             if (marcadorTemporal) map.removeLayer(marcadorTemporal);
 
+            const btnAgregarFicha = user.permissions?.includes('crear_ticket') 
+                ? `<button onclick="window.__agregarFichaCallback(${lat}, ${lng})" style="background:#0d6efd;color:white;border:none;border-radius:20px;padding:6px 15px;font-size:12px;font-weight:600;cursor:pointer;width:100%;">+ Agregar Ficha</button>`
+                : '';
+
             const popupHtml = `
                 <div style="font-family:sans-serif; text-align:center;">
                     <div style="margin-bottom:5px;color:#dc3545;font-size:18px;"><i class="fa-solid fa-location-crosshairs"></i></div>
                     <div style="font-size:11px;color:#666;margin-bottom:8px;">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
-                    <button onclick="window.__agregarFichaCallback(${lat}, ${lng})" style="background:#0d6efd;color:white;border:none;border-radius:20px;padding:6px 15px;font-size:12px;font-weight:600;cursor:pointer;width:100%;">+ Agregar Ficha</button>
+                    ${btnAgregarFicha}
                 </div>
             `;
 
@@ -227,14 +233,16 @@ const MapViewer = ({ onMapClick }) => {
                     <i className="fa-solid fa-earth-americas me-2 text-primary"></i>Visor de Incidentes
                 </h4>
                 <div className="d-flex align-items-center gap-2">
-                    <button
-                        className={`btn btn-sm rounded-pill px-3 shadow-sm transition-all ${filtrosVisibles ? 'btn-primary' : 'btn-outline-primary'}`}
-                        onClick={() => setFiltrosVisibles(!filtrosVisibles)}
-                    >
-                        <i className={`fa-solid ${filtrosVisibles ? 'fa-filter-circle-xmark' : 'fa-filter'} me-1`}></i>
-                        {filtrosVisibles ? 'Ocultar Filtros' : 'Mostrar Filtros'}
-                        {filtrosActivosCount > 0 && <span className="badge bg-white text-primary ms-2 rounded-pill">{filtrosActivosCount}</span>}
-                    </button>
+                    {user.permissions?.includes('ver_mapa_calor') && (
+                        <button
+                            className={`btn btn-sm rounded-pill px-3 shadow-sm transition-all ${filtrosVisibles ? 'btn-primary' : 'btn-outline-primary'}`}
+                            onClick={() => setFiltrosVisibles(!filtrosVisibles)}
+                        >
+                            <i className={`fa-solid ${filtrosVisibles ? 'fa-filter-circle-xmark' : 'fa-filter'} me-1`}></i>
+                            {filtrosVisibles ? 'Ocultar Filtros' : 'Filtros Dinámicos (Analista)'}
+                            {filtrosActivosCount > 0 && <span className="badge bg-white text-primary ms-2 rounded-pill">{filtrosActivosCount}</span>}
+                        </button>
+                    )}
                     <span className="badge bg-primary rounded-pill px-3 shadow-sm d-none d-md-inline-block">
                         {incidentesFiltrados.length} resultados
                     </span>

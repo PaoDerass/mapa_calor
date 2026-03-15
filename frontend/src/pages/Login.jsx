@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 
-const Login = ({ setToken }) => {
+const Login = () => {
+  const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -24,10 +26,7 @@ const Login = ({ setToken }) => {
 
       if (response.ok) {
         const data = await response.json();
-        localStorage.setItem('token', data.access_token);
-        localStorage.setItem('user_id', data.user_id);
-        localStorage.setItem('username', data.username);
-        setToken(data.access_token);
+        login(data);
       } else {
         setError('Credenciales incorrectas. Verifique e intente de nuevo.');
       }

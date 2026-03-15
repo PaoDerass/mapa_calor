@@ -1,7 +1,8 @@
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-
+from app.models.Rol import Rol
+from app.models.Regional import Regional
 class Usuario(Base):
     __tablename__ = "usuarios"
 
