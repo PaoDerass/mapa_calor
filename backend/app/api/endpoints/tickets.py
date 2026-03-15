@@ -155,7 +155,9 @@ async def listar_recientes(
     subtipo: Optional[int] = None,
     despacho: Optional[str] = None,
     fecha_desde: Optional[str] = None,
-    fecha_hasta: Optional[str] = None
+    fecha_hasta: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20
 ):
     """
     Obtiene todos los incidentes registrados en PostgreSQL.
@@ -191,12 +193,18 @@ async def listar_recientes(
                 query = query.filter(Incidente.subtipo_incidente_id == subtipo)
             if despacho:
                 query = query.filter(Incidente.despacho.ilike(f"%{despacho}%"))
-            if fecha_desde:
-                query = query.filter(Incidente.fecha_reporte_original >= fecha_desde)
             if fecha_hasta:
                 query = query.filter(Incidente.fecha_reporte_original <= f"{fecha_hasta} 23:59:59")
 
+            # 1. Contar total antes de paginar
+            total_records = query.count()
+
+            # 2. Aplicar orden y paginación
             query = query.order_by(Incidente.fecha_registro_sistema.desc())
+            
+            if page > 0:
+                skip = (page - 1) * page_size
+                query = query.offset(skip).limit(page_size)
             
             incidentes = query.all()
             
@@ -233,7 +241,12 @@ async def listar_recientes(
                     "lat": lat,
                     "lng": lng
                 })
-            return resultado
+            return {
+                "total": total_records,
+                "page": page,
+                "page_size": page_size,
+                "items": resultado
+            }
     except Exception as e:
         print(f"--- ERROR AL LEER DE POSTGRES ---\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))

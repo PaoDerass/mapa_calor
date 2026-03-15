@@ -82,10 +82,13 @@ const MapViewer = ({ onMapClick }) => {
         if (f.fechaHasta)   p.append('fecha_hasta', f.fechaHasta);
         try {
             const [rI, rC] = await Promise.all([
-                fetch(`http://127.0.0.1:8000/api/tickets/listar-recientes?${p}`, { headers: authHeader() }),
+                fetch(`http://127.0.0.1:8000/api/tickets/listar-recientes?${p}&page=-1`, { headers: authHeader() }),
                 fetch('http://127.0.0.1:8000/api/tickets/catalogos', { headers: authHeader() })
             ]);
-            if (rI.ok) setIncidentes(await rI.json());
+            if (rI.ok) {
+                const data = await rI.json();
+                setIncidentes(data.items || []);
+            }
             if (rC.ok) setCatalogos(await rC.json());
         } catch (e) { console.error('Error cargando mapa:', e); }
     };
