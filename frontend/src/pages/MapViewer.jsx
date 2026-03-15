@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import CameraModal from '../components/CameraModal';
 
 // --- ÍCONOS POR TIPO DE INCIDENTE ---
 const TIPO_ICONOS = {
@@ -57,6 +58,8 @@ const MapViewer = ({ onMapClick }) => {
     // ── Cámaras ──
     const [mostrarCamaras, setMostrarCamaras] = useState(false);
     const [camaras, setCamaras] = useState([]);
+    const [showCameraModal, setShowCameraModal] = useState(false);
+    const [tempCoords, setTempCoords] = useState(null);
 
     // ── Time-lapse ──
     const [playing, setPlaying] = useState(false);
@@ -90,12 +93,16 @@ const MapViewer = ({ onMapClick }) => {
     useEffect(() => { cargarDatos(); }, []);
 
     // ── Cargar cámaras al activar ──
+    const cargarCamaras = async () => {
+        try {
+            const r = await fetch('http://127.0.0.1:8000/api/tickets/capas/camaras', { headers: authHeader() });
+            if (r.ok) setCamaras(await r.json());
+        } catch (e) {}
+    };
+
     useEffect(() => {
         if (!mostrarCamaras || camaras.length > 0) return;
-        fetch('http://127.0.0.1:8000/api/tickets/capas/camaras', { headers: authHeader() })
-            .then(r => r.ok ? r.json() : [])
-            .then(data => setCamaras(data))
-            .catch(() => {});
+        cargarCamaras();
     }, [mostrarCamaras]);
 
     // ── Time-lapse: fechas únicas ordenadas ──
@@ -155,10 +162,14 @@ const MapViewer = ({ onMapClick }) => {
             // ── CAPAS DE INCIDENTES ──
             if (mostrarIncidentes) {
               if (isHeatmapLayer && L.heatLayer) {
-                const heatData = incidentesVisibles.filter(i => i.lat && i.lng).map(i => [i.lat, i.lng, 1.0]);
+                const heatData = incidentesVisibles.filter(i => i.lat && i.lng).map(i => [i.lat, i.lng, 1.5]); // Aumentamos el peso a 1.5
                 if (heatData.length > 0) {
-                    L.heatLayer(heatData, { radius: 25, blur: 15, maxZoom: 17,
-                        gradient: { 0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1: 'red' }
+                    L.heatLayer(heatData, { 
+                        radius: 35, // Aumentamos el radio de 25 a 35
+                        blur: 20, 
+                        maxZoom: 17,
+                        minOpacity: 0.4, // Asegura que los puntos sean visibles aunque no haya mucha densidad
+                        gradient: { 0.2: 'blue', 0.4: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1: 'red' } // Bajamos los umbrales
                     }).addTo(map);
                     try { map.fitBounds(L.latLngBounds(heatData.map(p => [p[0], p[1]])), { padding: [50,50], animate: false }); } catch(e){}
                 }
@@ -213,16 +224,33 @@ const MapViewer = ({ onMapClick }) => {
                 iconSize: [28, 28], iconAnchor: [14, 28]
             });
             window.__agregarFichaCallback = (lat, lng) => { if (onMapClick) onMapClick({ lat, lng }); };
+            window.__agregarCamaraCallback = (lat, lng) => { setTempCoords({ lat, lng }); setShowCameraModal(true); };
             let temp = null;
             map.on('click', e => {
                 const { lat, lng } = e.latlng;
                 if (temp) map.removeLayer(temp);
-                const btn = user.permissions?.includes('crear_ticket')
-                    ? `<button onclick="window.__agregarFichaCallback(${lat},${lng})" style="background:#0d6efd;color:white;border:none;border-radius:20px;padding:6px 15px;font-size:12px;font-weight:600;cursor:pointer;width:100%">+ Agregar Ficha</button>`
+
+                const btnFicha = user.permissions?.includes('crear_ticket')
+                    ? `<button onclick="window.__agregarFichaCallback(${lat},${lng})" style="background:#0d6efd;color:white;border:none;border-radius:20px;padding:6px 15px;font-size:11px;font-weight:600;cursor:pointer;flex:1">+ Ficha</button>`
                     : '';
+
+                const btnCamara = (mostrarCamaras && user.permissions?.includes('crear_ticket'))
+                    ? `<button onclick="window.__agregarCamaraCallback(${lat},${lng})" style="background:#198754;color:white;border:none;border-radius:20px;padding:6px 15px;font-size:11px;font-weight:600;cursor:pointer;flex:1"><i class="fa-solid fa-video me-1"></i>+ Cámara</button>`
+                    : '';
+
+                const popupContent = `
+                    <div style="font-family:sans-serif;text-align:center;min-width:140px">
+                        <div style="color:#dc3545;font-size:18px;margin-bottom:5px"><i class="fa-solid fa-location-crosshairs"></i></div>
+                        <div style="font-size:10px;color:#666;margin-bottom:8px">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
+                        <div style="display:flex;gap:5px;justify-content:center">
+                            ${btnFicha}
+                            ${btnCamara}
+                        </div>
+                    </div>`;
+
                 temp = L.marker([lat, lng], { icon: redIcon })
                     .addTo(map)
-                    .bindPopup(`<div style="font-family:sans-serif;text-align:center"><div style="color:#dc3545;font-size:18px;margin-bottom:5px"><i class="fa-solid fa-location-crosshairs"></i></div><div style="font-size:11px;color:#666;margin-bottom:8px">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>${btn}</div>`)
+                    .bindPopup(popupContent)
                     .openPopup();
             });
         };
@@ -231,6 +259,7 @@ const MapViewer = ({ onMapClick }) => {
         return () => {
             stopped = true;
             delete window.__agregarFichaCallback;
+            delete window.__agregarCamaraCallback;
             try { if (map) map.remove(); } catch(e){}
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -484,6 +513,19 @@ const MapViewer = ({ onMapClick }) => {
                     </div>
                 ))}
             </div>
+
+            {/* Modal de Cámaras */}
+            {showCameraModal && tempCoords && (
+                <CameraModal
+                    lat={tempCoords.lat}
+                    lng={tempCoords.lng}
+                    onClose={() => setShowCameraModal(false)}
+                    onSave={() => {
+                        setShowCameraModal(false);
+                        cargarCamaras();
+                    }}
+                />
+            )}
         </div>
     );
 };

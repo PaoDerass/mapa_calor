@@ -14,6 +14,7 @@ from app.models.Municipio import Municipio
 from app.models.SubtipoIncidente import SubtipoIncidente
 from app.models.usuario import Usuario  # Importar Usuario
 from app.models.Camara import Camara
+from app.schemas.camara import CamaraCreate
 from app.api.utils import registrar_log
 
 from app.api.deps import get_current_user, PermissionChecker
@@ -285,3 +286,26 @@ def obtener_camaras():
     except Exception as e:
         print(f"--- ERROR AL LEER CÁMARAS ---\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/capas/camaras", dependencies=[Depends(PermissionChecker(["crear_ticket"]))])
+@registrar_log("CREAR_CAMARA", detalles_func=lambda r, **kw: f"Cámara registrada: {kw['payload'].get('nombre')}")
+async def guardar_camara(payload: CamaraCreate, db: Session = Depends(get_db)):
+    """
+    Registra una nueva cámara de vigilancia en PostgreSQL.
+    """
+    try:
+        nueva_camara = Camara(
+            nombre=payload.nombre,
+            tipo=payload.tipo,
+            lat=payload.lat,
+            lng=payload.lng,
+            direccion=payload.direccion,
+            activa=payload.activa
+        )
+        db.add(nueva_camara)
+        db.commit()
+        db.refresh(nueva_camara)
+        return {"status": "success", "message": "Cámara registrada correctamente", "id": nueva_camara.id}
+    except Exception as e:
+        print(f"--- ERROR AL GUARDAR CÁMARA ---\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
