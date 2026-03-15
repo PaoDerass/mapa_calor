@@ -13,6 +13,7 @@ from app.models.TipoIncidente import TipoIncidente
 from app.models.Municipio import Municipio
 from app.models.SubtipoIncidente import SubtipoIncidente
 from app.models.usuario import Usuario  # Importar Usuario
+from app.models.Camara import Camara
 from app.api.utils import registrar_log
 
 from app.api.deps import get_current_user, PermissionChecker
@@ -258,4 +259,29 @@ async def obtener_catalogos():
             }
     except Exception as e:
         print(f"--- ERROR AL LEER CATÁLOGOS ---\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/capas/camaras")
+def obtener_camaras():
+    """
+    Devuelve la lista de cámaras de vigilancia registradas en PostgreSQL.
+    Endpoint público dentro del router autenticado.
+    """
+    try:
+        with Session(engine_pg) as session:
+            camaras = session.query(Camara).filter(Camara.activa == True).order_by(Camara.nombre).all()
+            return [
+                {
+                    "id": c.id,
+                    "nombre": c.nombre,
+                    "tipo": c.tipo or "Fija",
+                    "lat": c.lat,
+                    "lng": c.lng,
+                    "direccion": c.direccion or ""
+                }
+                for c in camaras
+            ]
+    except Exception as e:
+        print(f"--- ERROR AL LEER CÁMARAS ---\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))

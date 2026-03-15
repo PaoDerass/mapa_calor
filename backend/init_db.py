@@ -12,6 +12,7 @@ try:
     from app.models.Rol import Rol
     from app.models.Permisos import Permiso
     from app.models.usuario import Usuario
+    from app.models.Camara import Camara
     print("✅ Modelos cargados correctamente.")
 except ImportError as e:
     print(f"❌ Error de importación: {e}")

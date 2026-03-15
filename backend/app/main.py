@@ -12,6 +12,7 @@ from app.models.incidente import Incidente
 from app.models.SubtipoIncidente import SubtipoIncidente
 from app.models.usuario import Usuario # Asegúrate de que el modelo Usuario esté aquí
 from app.models.Permisos import Permiso
+from app.models.Camara import Camara
 # Importación de Routers
 from app.api.endpoints import tickets
 from app.api.endpoints import dashboard
