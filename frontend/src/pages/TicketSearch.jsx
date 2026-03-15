@@ -94,6 +94,50 @@ const TicketSearch = ({ setActiveTab, onTicketClick }) => {
     // Helper para fecha hasta (ajustar si es necesario)
     const filtro_hasta_plus = filtroFechaHasta;
 
+    const exportarExcel = () => {
+        const params = new URLSearchParams();
+        if (filtroBusqueda)       params.append('despacho', filtroBusqueda);
+        if (filtroDepartamentoId) params.append('departamento', filtroDepartamentoId);
+        if (filtroTipoId)         params.append('tipo', filtroTipoId);
+        if (filtroFechaDesde)     params.append('fecha_desde', filtroFechaDesde);
+        if (filtroFechaHasta)     params.append('fecha_hasta', filtroFechaHasta);
+
+        const url = `http://127.0.0.1:8000/api/tickets/exportar-excel?${params.toString()}`;
+        
+        // Abrir en nueva pestaña o usar un link temporal para la descarga
+        const link = document.createElement('a');
+        link.href = url;
+        // Agregamos el token si es necesario, pero como es un GET de descarga, 
+        // a veces es mejor pasarlo como param si el backend no lo pide en header para GETs de archivos
+        // En este caso, el backend pide get_current_user y PermissionChecker que miran el token.
+        // Como no podemos pasar headers fácilmente con window.open, 
+        // una opción es pasar el token por query param o usar fetch + blob.
+        // Vamos a usar fetch + blob para ser consistentes con la seguridad.
+        
+        descargarArchivo(url);
+    };
+
+    const descargarArchivo = async (url) => {
+        try {
+            const res = await fetch(url, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            if (!res.ok) throw new Error("Error al exportar");
+            const blob = await res.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = `reporte_incidentes_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(downloadUrl);
+            a.remove();
+        } catch (e) {
+            console.error(e);
+            showAlert("No se pudo exportar el archivo.", "error", "Error");
+        }
+    };
+
     return (
         <div className="page-transition container-fluid pb-5">
             {/* Encabezado */}
@@ -108,11 +152,7 @@ const TicketSearch = ({ setActiveTab, onTicketClick }) => {
                     <button
                         className="btn btn-outline-success px-4 py-2 rounded-pill shadow-sm fw-bold"
                         disabled={!user.permissions?.includes('exportar_datos')}
-                        onClick={() => {
-                            if (user.permissions?.includes('exportar_datos')) {
-                                alert("Funcionalidad de exportación a Excel en desarrollo.");
-                            }
-                        }}
+                        onClick={exportarExcel}
                     >
                         <i className="fa-solid fa-file-excel me-2"></i>Exportar
                     </button>

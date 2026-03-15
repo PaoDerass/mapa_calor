@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text, exc
 from sqlalchemy.orm import Session
 from geoalchemy2.functions import ST_GeomFromText
@@ -6,6 +7,8 @@ from geoalchemy2.shape import to_shape
 from shapely.geometry import Point
 from typing import Any, List, Optional
 import traceback
+import pandas as pd
+import io
 from app.core.database import engine_mysql, engine_pg, get_db
 from app.models.incidente import Incidente
 from app.models.Departamento import Departamento
@@ -249,6 +252,88 @@ async def listar_recientes(
             }
     except Exception as e:
         print(f"--- ERROR AL LEER DE POSTGRES ---\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/exportar-excel", dependencies=[Depends(PermissionChecker(["exportar_datos"]))])
+async def exportar_excel(
+    departamento: Optional[int] = None,
+    municipio: Optional[int] = None,
+    tipo: Optional[int] = None,
+    subtipo: Optional[int] = None,
+    despacho: Optional[str] = None,
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None
+):
+    """
+    Exporta los incidentes filtrados a un archivo Excel (.xlsx).
+    """
+    try:
+        with Session(engine_pg) as session:
+            query = (
+                session.query(
+                    Incidente.ticket_id_original.label("Ticket ID"),
+                    Incidente.fecha_reporte_original.label("Fecha Reporte"),
+                    Incidente.descripcion_original.label("Descripción"),
+                    Departamento.nombre.label("Departamento"),
+                    Municipio.nombre.label("Municipio"),
+                    TipoIncidente.nombre.label("Tipo"),
+                    SubtipoIncidente.nombre.label("Subtipo"),
+                    Incidente.despacho.label("Despacho"),
+                    Incidente.mando.label("Mando"),
+                    Incidente.unidad.label("Unidad"),
+                    Usuario.nombre_usuario.label("Registrado Por")
+                )
+                .outerjoin(Departamento, Incidente.departamento_id == Departamento.id)
+                .outerjoin(Municipio, Incidente.municipio_id == Municipio.id)
+                .outerjoin(TipoIncidente, Incidente.tipo_incidente_id == TipoIncidente.id)
+                .outerjoin(SubtipoIncidente, Incidente.subtipo_incidente_id == SubtipoIncidente.id)
+                .outerjoin(Usuario, Incidente.usuario_id == Usuario.id)
+            )
+
+            # Aplicar filtros
+            if departamento:
+                query = query.filter(Incidente.departamento_id == departamento)
+            if municipio:
+                query = query.filter(Incidente.municipio_id == municipio)
+            if tipo:
+                query = query.filter(Incidente.tipo_incidente_id == tipo)
+            if subtipo:
+                query = query.filter(Incidente.subtipo_incidente_id == subtipo)
+            if despacho:
+                query = query.filter(Incidente.despacho.ilike(f"%{despacho}%"))
+            if fecha_desde:
+                query = query.filter(Incidente.fecha_reporte_original >= f"{fecha_desde} 00:00:00")
+            if fecha_hasta:
+                query = query.filter(Incidente.fecha_reporte_original <= f"{fecha_hasta} 23:59:59")
+
+            results = query.order_by(Incidente.fecha_registro_sistema.desc()).all()
+            
+            # Convertir a DataFrame
+            # SQLAlchemy query results can be passed to DataFrame.from_records
+            df = pd.DataFrame(results)
+
+            # Formatear la columna de fecha si existe
+            if not df.empty and "Fecha Reporte" in df.columns:
+                df["Fecha Reporte"] = pd.to_datetime(df["Fecha Reporte"]).dt.strftime('%Y-%m-%d %H:%M')
+
+            # Crear el archivo Excel en memoria
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='Incidentes')
+            
+            output.seek(0)
+            
+            headers = {
+                'Content-Disposition': 'attachment; filename="incidentes_export.xlsx"'
+            }
+            return StreamingResponse(
+                output, 
+                headers=headers,
+                media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+
+    except Exception as e:
+        print(f"--- ERROR AL EXPORTAR EXCEL ---\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
